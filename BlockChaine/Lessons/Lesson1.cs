@@ -21,7 +21,7 @@ namespace BlockChaine.Lessons
             mainChain.AddBlock("Charlie", "-> Dave: 1 BTC");
 
             display.DisplayBlockChain(mainChain.Chain);
-            display.PrintChainValidity(mainChain.isChainValid());
+            display.PrintChainValidity(mainChain.isValid());
 
 
             Console.WriteLine("\n\n=== AFTER CHANGING ===\n");
@@ -29,7 +29,7 @@ namespace BlockChaine.Lessons
             mainChain.Chain[1].Data = "-> Bob: 500 BTC";
 
             display.DisplayBlockChain(mainChain.Chain);
-            display.PrintChainValidity(mainChain.isChainValid());
+            display.PrintChainValidity(mainChain.isValid());
         }
 
         public static void Run()

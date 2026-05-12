@@ -37,6 +37,12 @@ namespace BlockChaine.Services
             Chain.Add(newBlock);
         }
 
+        public void ClearChain()
+        {
+            Chain.Clear();
+            CreateGenesisBlock();
+        }
+
         public int GetCorruptedBlockIndex() {
 
             for (int i = 1; i < Chain.Count; i++) { 
@@ -66,19 +72,9 @@ namespace BlockChaine.Services
 
         }
 
-        public bool isChainValid()
+        public bool isValid()
         {
-            for (int i = 1; i < Chain.Count; i++)
-            {
-                var currentBlock = Chain[i];
-                var previousBlock = Chain[i - 1];
-
-                if (currentBlock.Hash != _hashingService.ComputeHash(currentBlock))
-                    return false;
-                if (currentBlock.PreviousHash != previousBlock.Hash)
-                    return false;
-            }
-            return true;
+            return IsValidChain(Chain);
         }
 
         public bool IsValidChain(List<Block> chain)
@@ -88,6 +84,8 @@ namespace BlockChaine.Services
                 var currentBlock = chain[i];
                 var previousBlock = chain[i - 1];
 
+                if (!_consensusRule.IsValid(currentBlock.Hash))
+                    return false;
                 if (currentBlock.Hash != _hashingService.ComputeHash(currentBlock))
                     return false;
                 if (currentBlock.PreviousHash != previousBlock.Hash)
