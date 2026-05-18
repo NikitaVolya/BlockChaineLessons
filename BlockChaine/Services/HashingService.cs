@@ -1,20 +1,34 @@
 ﻿using BlockChaine.Models;
-using System;
-using System.Collections.Generic;
-using System.Linq;
+using System.Security.Cryptography;
 using System.Text;
-using System.Threading.Tasks;
 
 namespace BlockChaine.Services
 {
-    public class HashingService
+    internal class HashingService
     {
-        public string ComputeHash(Block block) {
-            var input = $"{block.Index}{block.Timestamp:O}{block.Author}{block.Data}{block.PreviousHash}{block.Nonce}";
-            return ComputeSha256Hash(input);
+        public string ComputeStringHashWitoutNonce(Block block)
+        {
+            return $"{block.Index}{block.Timestamp:O}{block.Author}{block.Data}{block.PreviousHash}";
         }
 
-        private string ComputeSha256Hash(string input)
+        public string ComputeHash(Block block) {
+
+            byte[] staticBytes = Encoding.UTF8.GetBytes(ComputeStringHashWitoutNonce(block));
+            byte[] buffer = new byte[staticBytes.Length + sizeof(int)];
+            Buffer.BlockCopy(staticBytes, 0, buffer, 0, staticBytes.Length);
+
+            BitConverter.TryWriteBytes(
+                buffer.AsSpan(staticBytes.Length),
+                block.Nonce
+            );
+
+            string res = String.Empty;
+            using (SHA256 sha256 = SHA256.Create())
+                res = Convert.ToHexString(sha256.ComputeHash(buffer)).ToLower();
+            return res;
+        }
+
+        public string ComputeSha256Hash(string input)
         {
             using (var sha256 = System.Security.Cryptography.SHA256.Create())
             {

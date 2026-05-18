@@ -1,17 +1,21 @@
 ﻿using BlockChaine.Models;
 using BlockChaine.Consensus;
 
-
 namespace BlockChaine.Services
 {
     internal class BlockChainService
     {
         public List<Block> Chain { get; set; }
 
-
         private readonly HashingService _hashingService;
         private readonly MiningService _miningService;
+
         private readonly IConsesnsusRule _consensusRule;
+
+        private readonly int _adjustmentInterval = 2;
+        private readonly double _targetBlockTime = 10;
+
+        public int Dificulty => _consensusRule.GetDificulty();
 
         public BlockChainService(IConsesnsusRule consesnsusRule)
         {
@@ -33,8 +37,31 @@ namespace BlockChaine.Services
         {
             var previousBlock = Chain.Last();
             var newBlock = new Block(previousBlock.Index + 1, author, data, previousBlock.Hash);
+
             _miningService.MineBlock(newBlock);
+            newBlock.Dificulty = _consensusRule.GetDificulty();
             Chain.Add(newBlock);
+            if (newBlock.Index % _adjustmentInterval == 0)
+            {
+                AdjustDifficulty();
+            }
+        }
+
+        private void AdjustDifficulty()
+        {
+            var recentBlocks = Chain.Where(b => b.Index != 0).TakeLast(_adjustmentInterval).ToList();
+
+            if (recentBlocks.Count == 0)
+                return;
+
+            double averageTime = recentBlocks.Average(b => (b.Timestamp - Chain[b.Index - 1].Timestamp).TotalSeconds);
+            if (averageTime < _targetBlockTime)
+            {
+                _consensusRule.AddDificulty(1);
+            } else
+            {
+                _consensusRule.AddDificulty(-1);
+            }
         }
 
         public void ClearChain()
@@ -84,8 +111,6 @@ namespace BlockChaine.Services
                 var currentBlock = chain[i];
                 var previousBlock = chain[i - 1];
 
-                if (!_consensusRule.IsValid(currentBlock.Hash))
-                    return false;
                 if (currentBlock.Hash != _hashingService.ComputeHash(currentBlock))
                     return false;
                 if (currentBlock.PreviousHash != previousBlock.Hash)
@@ -119,6 +144,16 @@ namespace BlockChaine.Services
 
             Console.WriteLine("Current chain remains authoritative.");
             return false;
+        }
+
+        public void PrintDificultyHistory()
+        {
+            Console.Write("Dificulty history: ");
+            foreach (var block in Chain)
+            {
+                Console.Write($"{block.Dificulty} -> ");
+            }
+            Console.WriteLine();
         }
     }
 }

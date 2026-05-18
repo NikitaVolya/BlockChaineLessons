@@ -29,7 +29,7 @@ namespace BlockChaine.Lessons
             {
                 Console.Write($"DIFFICULTY {difficylty}");
 
-                IConsesnsusRule consensus = new BaseConsesnsusRule(difficylty);
+                IConsesnsusRule consensus = new POWConsesnsusRule(difficylty);
                 BlockChainService mainChain = new BlockChainService(consensus);
 
                 watch.Start();
@@ -57,7 +57,7 @@ namespace BlockChaine.Lessons
          */
         public static void RunExercice2()
         {
-            var consensus = new BitcoinConsensusRule(2, "cafe");
+            var consensus = new SignPOWConsensusRule(2, "cafe");
 
             var mainChain = new BlockChainService(consensus);
             var display = new BlockChainDisplayService();
@@ -115,7 +115,7 @@ namespace BlockChaine.Lessons
 
         public static void RunHomeWork()
         {
-            /*RunExercice1();*/
+            RunExercice1();
             RunExercice2();
         }
 

@@ -2,7 +2,7 @@
 
 namespace BlockChaine.Services
 {
-    public class BlockChainDisplayService
+    internal class BlockChainDisplayService
     {
         public void DisplayBlockChain(List<Models.Block> chain)
         {
@@ -14,6 +14,7 @@ namespace BlockChaine.Services
                 Console.WriteLine($"Data: {block.Data}");
                 Console.WriteLine($"Hash: {block.Hash}");
                 Console.WriteLine($"Nonce: {block.Nonce}");
+                Console.WriteLine($"Difficulty: {block.Dificulty}");
                 Console.WriteLine($"Previous Hash: {block.PreviousHash}");
                 Console.WriteLine(new string('-', 40));
             }

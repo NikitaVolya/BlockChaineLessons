@@ -1,12 +1,9 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+﻿using BlockChaine.Consensus;
+
 
 namespace BlockChaine.Models
 {
-    public class Block : ICloneable
+    internal class Block : ICloneable
     {
         public int Index { get; set; }
         public DateTime Timestamp { get; set; }
@@ -15,6 +12,10 @@ namespace BlockChaine.Models
         public string Hash { get; set; }
         public string PreviousHash { get; set; }
         public int Nonce { get; set; } = 0;
+
+        public int Dificulty { get; set; } = 0;
+
+        public IConsesnsusRule? ConsensusRule { get; set; } = null;
 
         public Block(int index, string author, string data, string previousHash)
         {
