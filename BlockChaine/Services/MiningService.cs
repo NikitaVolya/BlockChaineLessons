@@ -11,7 +11,7 @@ namespace BlockChaine.Services
         private readonly IConsesnsusRule _consesnsusRule;
 
         private object _lock = new object();
-        private volatile int _nonceValue = 0;
+        private volatile int _nonceValue = 1;
         private static int _taskCount = 16;
 
 
@@ -26,6 +26,8 @@ namespace BlockChaine.Services
             if (count >= 1)
             {
                 _taskCount = count;
+            } else {
+                throw new ArgumentException("Task count must be at least 1.");
             }
         }
 
@@ -71,6 +73,11 @@ namespace BlockChaine.Services
 
         public void MineBlock(Models.Block block)
         {
+            if (_nonceValue == 0)
+                throw new InvalidOperationException("Mining is already in progress.");
+            if (block == null)
+                throw new ArgumentNullException(nameof(block));
+
             _nonceValue = 0;
             for (int i = 0; i < _taskCount; i++)
             {

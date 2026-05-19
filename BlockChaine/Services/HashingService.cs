@@ -8,7 +8,9 @@ namespace BlockChaine.Services
     {
         public string ComputeStringHashWitoutNonce(Block block)
         {
-            return $"{block.Index}{block.Timestamp:O}{block.Author}{block.Data}{block.PreviousHash}";
+            string transactionRowData = string.Concat(block.Transactions.Select(t => t.ToRowString()));
+
+            return $"{block.Index}{block.Timestamp:O}{transactionRowData}{block.PreviousHash}";
         }
 
         public string ComputeHash(Block block) {

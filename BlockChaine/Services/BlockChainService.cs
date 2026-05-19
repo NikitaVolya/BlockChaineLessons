@@ -15,6 +15,8 @@ namespace BlockChaine.Services
         private readonly int _adjustmentInterval = 2;
         private readonly double _targetBlockTime = 10;
 
+        private readonly int _transactionLimitPerBlock = 3;
+
         public int Dificulty => _consensusRule.GetDificulty();
 
         public BlockChainService(IConsesnsusRule consesnsusRule)
@@ -28,15 +30,21 @@ namespace BlockChaine.Services
 
         private void CreateGenesisBlock()
         {
-            var genesisBlock = new Block(0, "", "", "0");
+            var genesisBlock = new Block(0, new List<Transaction>(), "0");
             _miningService.MineBlock(genesisBlock);
             Chain.Add(genesisBlock);
         }
 
-        public void AddBlock(string author, string data)
+        public void AddBlock(List<Transaction> data)
         {
+            if (data.Count > _transactionLimitPerBlock)
+                throw new Exception($"Transaction limit per block exceeded. Max allowed is {_transactionLimitPerBlock}.");
+
+            if (data.Count == 0 && Chain.Count != 0)
+                throw new Exception("Cannot add an empty block. Please provide at least one transaction.");
+
             var previousBlock = Chain.Last();
-            var newBlock = new Block(previousBlock.Index + 1, author, data, previousBlock.Hash);
+            var newBlock = new Block(previousBlock.Index + 1, data, previousBlock.Hash);
 
             _miningService.MineBlock(newBlock);
             newBlock.Dificulty = _consensusRule.GetDificulty();
@@ -106,11 +114,19 @@ namespace BlockChaine.Services
 
         public bool IsValidChain(List<Block> chain)
         {
+            const int timeErrorArea = 1; // Allow 1 minute of time discrepancy
+
             for (int i = 1; i < chain.Count; i++)
             {
                 var currentBlock = chain[i];
                 var previousBlock = chain[i - 1];
 
+                if (currentBlock.Transactions == null)
+                    return false;
+                if ((currentBlock.Timestamp - previousBlock.Timestamp).Microseconds <= 100)
+                    return false;
+                if (DateTime.UtcNow.AddMinutes(timeErrorArea) < currentBlock.Timestamp)
+                    return false;
                 if (currentBlock.Hash != _hashingService.ComputeHash(currentBlock))
                     return false;
                 if (currentBlock.PreviousHash != previousBlock.Hash)

@@ -9,12 +9,15 @@ namespace BlockChaine.Lessons
         public static void ClassWork()
         {
             var blockchain = new BlockChainService(new POWConsesnsusRule(1));
+            var transactionService = new TransactionService();
             var display = new BlockChainDisplayService();
 
             for (int i = 0; i < 20; i++)
             {
-
-                blockchain.AddBlock("Alice", "-> Bob: 5 BTC");
+                blockchain.AddBlock(new List<Models.Transaction>()
+                {
+                    transactionService.CreateTransaction("Alice", "Bob", 5),
+                });
 
                 display.DisplayBlockChain(blockchain.Chain);
                 display.PrintChainValidity(blockchain.isValid());
@@ -49,7 +52,7 @@ namespace BlockChaine.Lessons
         public static void Exercice12()
         {
             var display = new BlockChainDisplayService();
-
+            var transactionService = new TransactionService();
             var watch = new System.Diagnostics.Stopwatch();
 
             for (int j = 1; j <= 32; j += 31)
@@ -59,19 +62,24 @@ namespace BlockChaine.Lessons
                 Console.WriteLine($"Mining blocks with {j} TASK");
                 MiningService.SetTaskCount(j);
 
-                for (int i = 0; i < 15; i++)
+                for (int i = 0; i < 13; i++)
                 {
                     var difficulty = blockchain.Dificulty;
 
                     watch.Reset();
                     watch.Start();
-                    blockchain.AddBlock("Alice", "-> Bob: 5 BTC");
+                    blockchain.AddBlock(new List<Models.Transaction>()
+                    {
+                        transactionService.CreateTransaction("Alice", "Bob", 5),
+                    });
                     watch.Stop();
                     Console.WriteLine($" time taken for block with dificulty {difficulty}: {watch.ElapsedMilliseconds} ms");
 
                     blockchain.PrintDificultyHistory();
                 }
             }
+            Console.WriteLine("Press any key to continue...");
+            Console.ReadKey();
 
         }
 
