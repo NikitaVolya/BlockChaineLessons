@@ -1,5 +1,6 @@
-﻿using BlockChaine.Models;
-using BlockChaine.Consensus;
+﻿using BlockChaine.Consensus;
+using BlockChaine.Models;
+using static System.Runtime.InteropServices.JavaScript.JSType;
 
 namespace BlockChaine.Services
 {
@@ -9,6 +10,7 @@ namespace BlockChaine.Services
 
         private readonly HashingService _hashingService;
         private readonly MiningService _miningService;
+        private readonly TransactionService _transactionService;
 
         private readonly IConsesnsusRule _consensusRule;
 
@@ -22,9 +24,13 @@ namespace BlockChaine.Services
         public BlockChainService(IConsesnsusRule consesnsusRule)
         {
             Chain = new List<Block>();
+
             _hashingService = new HashingService();
             _miningService = new MiningService(consesnsusRule);
+            _transactionService = new TransactionService(new WalletService());
+
             _consensusRule = consesnsusRule;
+            
             CreateGenesisBlock();
         }
 
@@ -42,6 +48,15 @@ namespace BlockChaine.Services
 
             if (data.Count == 0 && Chain.Count != 0)
                 throw new Exception("Cannot add an empty block. Please provide at least one transaction.");
+
+            foreach (var transaction in data)
+            {
+                var transactionValidation = _transactionService.IsValid(transaction);
+                if (transaction.Signature == null || !transactionValidation.Item1)
+                    throw new Exception($"Invalid transaction detected: {transaction.Id}\n{transactionValidation.Item2}");
+                if (Chain.Exists(b => b.Transactions.Exists(t => t.Id == transaction.Id)))
+                    throw new Exception($"Transaction with id: {transaction.Id} is already exists in block chain\n");
+            }
 
             var previousBlock = Chain.Last();
             var newBlock = new Block(previousBlock.Index + 1, data, previousBlock.Hash);
@@ -107,12 +122,12 @@ namespace BlockChaine.Services
 
         }
 
-        public bool isValid()
+        public (bool, string) isValid()
         {
             return IsValidChain(Chain);
         }
 
-        public bool IsValidChain(List<Block> chain)
+        public (bool, string) IsValidChain(List<Block> chain)
         {
             const int timeErrorArea = 1; // Allow 1 minute of time discrepancy
 
@@ -122,26 +137,33 @@ namespace BlockChaine.Services
                 var previousBlock = chain[i - 1];
 
                 if (currentBlock.Transactions == null)
-                    return false;
+                    return (false, "");
                 if ((currentBlock.Timestamp - previousBlock.Timestamp).Microseconds <= 100)
-                    return false;
+                    return (false, $"Block {currentBlock.Index} has an invalid timestamp: {currentBlock.Timestamp}");
                 if (DateTime.UtcNow.AddMinutes(timeErrorArea) < currentBlock.Timestamp)
-                    return false;
+                    return (false, $"Block {currentBlock.Index} has a timestamp from the future: {currentBlock.Timestamp}");
                 if (currentBlock.Hash != _hashingService.ComputeHash(currentBlock))
-                    return false;
+                    return (false, $"Block {currentBlock.Index} has an invalid hash: {currentBlock.Hash}");
                 if (currentBlock.PreviousHash != previousBlock.Hash)
-                    return false;
+                    return (false, $"Block {currentBlock.Index} has an invalid previous hash: {currentBlock.PreviousHash}");
+
+                foreach (var transaction in currentBlock.Transactions)
+                {
+                    var transactionValidation = _transactionService.IsValid(transaction);
+                    if (transaction.Signature == null || !transactionValidation.Item1)
+                        return (false, $"Invalid transaction detected: {transaction.Id}\n{transactionValidation.Item2}");
+                }
 
             }
 
-            return true;
+            return (true, "Chain is valid.");
         }
 
         public bool ResolveConsensus(List<Block> competingChain)
         {
             Console.WriteLine("Resolving consensus...");
 
-            if (!IsValidChain(competingChain))
+            if (!IsValidChain(competingChain).Item1)
             {
                 Console.WriteLine("Competing chain is invalid.");
                 return false;

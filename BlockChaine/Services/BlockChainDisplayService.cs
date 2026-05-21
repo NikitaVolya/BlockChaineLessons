@@ -1,6 +1,9 @@
 ﻿
 
 using BlockChaine.Models;
+using System.Net;
+using System.Security.Cryptography.X509Certificates;
+using System.Xml.Linq;
 
 namespace BlockChaine.Services
 {
@@ -57,6 +60,31 @@ namespace BlockChaine.Services
             }
         }
 
+        public void PrintWallet(Wallet wallet)
+        {
+            string shortPublicKey = Convert.ToHexString(wallet.PublicKey);
+
+            if (shortPublicKey.Length > 20)
+                shortPublicKey = shortPublicKey[..20] + "...";
+
+            string[] lines =
+            {
+                $"   Owner     : {wallet.Name}",
+                $"   Address   : {wallet.Address}",
+                $"   PublicKey : {shortPublicKey}"
+            };
+
+            int width = lines.Max(l => l.Length);
+
+            Console.WriteLine($"╔{new string('═', width + 2)}╗");
+
+            foreach (var line in lines)
+            {
+                Console.WriteLine($"║ {line.PadRight(width)} ║");
+            }
+
+            Console.WriteLine($"╚{new string('═', width + 2)}╝");
+        }
         public void PrintChainValidity(bool isValid)
         {
             Console.WriteLine(isValid ? "The blockchain is valid." : "The blockchain is invalid.");
