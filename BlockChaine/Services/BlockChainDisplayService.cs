@@ -60,6 +60,22 @@ namespace BlockChaine.Services
             }
         }
 
+        public void PrintPendingTransactions(List<Transaction> pendingTransactions)
+        {
+            Console.WriteLine("Pending Transactions:");
+            Console.WriteLine(new string('=', 40));
+            if (pendingTransactions.Count == 0)
+            {
+                Console.WriteLine("No pending transactions.");
+                return;
+            }
+            foreach (var transaction in pendingTransactions)
+            {
+                Console.WriteLine($"{transaction}");
+                Console.WriteLine(new string('-', 30));
+            }
+        }
+
         public void PrintWallet(Wallet wallet)
         {
             string shortPublicKey = Convert.ToHexString(wallet.PublicKey);

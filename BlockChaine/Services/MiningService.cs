@@ -62,7 +62,7 @@ namespace BlockChaine.Services
                 }
                 nonce += step;
             }
-            
+           
 
             lock (_lock)
             {
