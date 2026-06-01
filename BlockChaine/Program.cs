@@ -6,11 +6,12 @@ using System;
 using System.ComponentModel.DataAnnotations;
 
 
-var consensuRule = new POWConsesnsusRule(4);
+var consensuRule = new POWConsesnsusRule(5);
 var blockchain = new BlockChainService(consensuRule);
 var walletService = new WalletService();
 var transactionService = new TransactionService(walletService);
 var displayService = new BlockChainDisplayService();
+var merkleTreeAudito = new MerkleTreeAudito();
 
 var aliceWallet = walletService.CreateWallet("Alice");
 var bobWallet = walletService.CreateWallet("Bob");
@@ -42,6 +43,15 @@ Wallet SelectWallet(string? name)
     }
 }
 
+void CheckTampering(Block block)
+{
+    TamperDetectorService tamperDetector = new TamperDetectorService();
+
+    Transaction randomTransaction = block.Transactions[new Random().Next(block.Transactions.Count)];
+
+    tamperDetector.DetectTampering(block, randomTransaction);
+}
+
 while (true)
 {
     string? senderName, recipientName, memo, recipientAddress, txId;
@@ -49,17 +59,29 @@ while (true)
     int lockTime;
     Wallet senderWallet;
 
+    Console.WriteLine("0. Create sample transactions");
     Console.WriteLine("1. Create transaction");
     Console.WriteLine("2. Mine pending transactions");
     Console.WriteLine("3. Display blockchain");
     Console.WriteLine("4. Get balance");
     Console.WriteLine("5. Change transaction");
     Console.WriteLine("6. Display pending transactions");
-    Console.WriteLine("7. Exit");
+    Console.WriteLine("7. Display Merkle Tree for block");
+    Console.WriteLine("8. Check tampering");
+    Console.WriteLine("9. Exit");
 
     var choice = Console.ReadLine();
     switch (choice)
     {
+        case "0":
+            blockchain.MinePendingTransactions(bobWallet.Address);
+            var tx1 = transactionService.CreateTransaction(bobWallet, aliceWallet.Address, 20, "Payment for services", 10);
+            var tx2 = transactionService.CreateTransaction(bobWallet, johnWallet.Address, 10, "Gift", 10);
+            blockchain.AddTransaction(tx1);
+            blockchain.AddTransaction(tx2);
+            blockchain.MinePendingTransactions(johnWallet.Address);
+            Console.WriteLine("Sample transactions created successfully!");
+            break;
         case "1":
             Console.Write("Enter sender (Alice/Bob/John): ");
             senderName = Console.ReadLine();
@@ -98,7 +120,7 @@ while (true)
             break;
         case "3":
             displayService.DisplayBlockChain(blockchain.Chain);
-            displayService.PrintChainValidity(blockchain.isValid().isValid);
+            displayService.PrintChainValidity(blockchain.isValid().result);
             break;
         case "4":
             Console.Write("Enter wallet name (Alice/Bob/john): "); 
@@ -144,6 +166,58 @@ while (true)
             displayService.PrintPendingTransactions(blockchain.PendingTransactions);
             break;
         case "7":
+            Console.Write("Enter block index: ");
+            int blockIndex = int.Parse(Console.ReadLine() ?? "0");
+            var block = blockchain.Chain.FirstOrDefault(b => b.Index == blockIndex);
+            if (block != null)
+            {
+
+                List<List<string>> merkleTree = merkleTreeAudito.BuildFullTree(block.Transactions);
+                displayService.PrintTreeStructure(merkleTree);
+            }
+            else
+            {
+                Console.WriteLine("Block not found.");
+            }
+            break;
+        case "8":
+            Console.Write("Enter block index to check for tampering: ");
+            int tamperBlockIndex = int.Parse(Console.ReadLine() ?? "0");
+
+            var tamperBlock = blockchain.Chain.FirstOrDefault(b => b.Index == tamperBlockIndex);
+
+            if (tamperBlock != null)
+            {
+                CheckTampering(tamperBlock);
+                List<List<string>> merkleTree = tamperBlock.MerkleTree;
+
+                merkleTree.ForEach(level => Console.WriteLine(string.Join(" ", level)));
+
+                merkleTree[0].ForEach(hash => { 
+
+                    List<MerkleProofElement> proof = merkleTreeAudito.GenerateMerkleProof(merkleTree, hash);
+
+                    Console.Write("Proof for transaction hash: " + hash + " -> ");
+                    proof.ForEach(proofHash => Console.Write(proofHash.Hash + " "));
+
+                    if (merkleTreeAudito.VerifyMerkleProof(hash, proof, tamperBlock.MerkleRoot))
+                    {
+                        Console.WriteLine(" - Valid proof");
+                    }
+                    else
+                    {
+                        Console.WriteLine(" - Invalid proof");
+                    }
+
+                    Console.WriteLine();
+                });
+            }
+            else
+            {
+                Console.WriteLine("Block not found.");
+            }
+            break;
+        case "9":
             return;
         default:
             Console.WriteLine("Invalid choice. Please try again.");

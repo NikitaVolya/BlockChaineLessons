@@ -241,9 +241,10 @@ namespace BlockChaine.Services
 
         }
 
-        public (bool isValid, string errorMessage) isValid()
+        public (bool result, string errorMessage) isValid()
         {
-            return IsValidChain(Chain);
+            (bool isValide, string errorMessage) = IsValidChain(Chain);
+            return (isValide, errorMessage);
         }
 
         public (bool isValid, string errorMessage) IsValidChain(List<Block> chain)

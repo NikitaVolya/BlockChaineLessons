@@ -1,9 +1,7 @@
 ﻿
 
 using BlockChaine.Models;
-using System.Net;
-using System.Security.Cryptography.X509Certificates;
-using System.Xml.Linq;
+
 
 namespace BlockChaine.Services
 {
@@ -104,6 +102,36 @@ namespace BlockChaine.Services
         public void PrintChainValidity(bool isValid)
         {
             Console.WriteLine(isValid ? "The blockchain is valid." : "The blockchain is invalid.");
+        }
+
+        public void PrintTreeStructure(List<List<string>> merkleTree)
+        {
+            for (int i = merkleTree.Count - 1; i >= 0; i--)
+            {
+                Console.Write($"Level {merkleTree.Count - 1 - i} ");
+
+                if (i == merkleTree.Count - 1)
+                {
+                    Console.Write("(Root): ");
+                }
+                else if (i == 0)
+                {
+                    Console.Write("(Leaves): ");
+                } 
+                else
+                {
+                    Console.Write("(Branches): ");
+                }
+
+                Console.WriteLine($"{merkleTree[i].Count} hash");
+
+                Console.Write("   -> ");
+                foreach (var hash in merkleTree[i])
+                {
+                    Console.Write($"{hash}   ");
+                }
+                Console.Write("\n");
+            }
         }
     }
 }

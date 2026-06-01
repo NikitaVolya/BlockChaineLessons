@@ -14,6 +14,9 @@ namespace BlockChaine.Models
 
         public int Dificulty { get; set; } = 0;
 
+        public string MerkleRoot { get; set; }
+
+        public List<List<string>> MerkleTree { get; set; }
 
         public Block(int index, List<Transaction> transactions, string previousHash)
         {
