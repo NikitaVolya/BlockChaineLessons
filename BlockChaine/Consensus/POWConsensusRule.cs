@@ -12,16 +12,26 @@ namespace BlockChaine.Consensus
         }
         public bool IsValid(string hash)
         {
-            var prefix = new string('0', _difficulty);
+            return IsValid(hash, _difficulty);
+        }
+
+        public bool IsValid(string hash, int difficulty)
+        {
+            var prefix = new string('0', difficulty);
             return hash.StartsWith(prefix);
         }
 
         public bool IsValid(byte[] hash)
         {
+            return IsValid(hash, _difficulty);
+        }
+
+        public bool IsValid(byte[] hash, int difficulty)
+        {
             int index, shift;
             bool res = true;
 
-            for (int i = 0; i < _difficulty; i++)
+            for (int i = 0; i < difficulty; i++)
             {
                 index = i / 2;
                 shift = ((i + 1) % 2) * 4;

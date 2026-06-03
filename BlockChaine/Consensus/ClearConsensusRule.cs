@@ -9,7 +9,17 @@ namespace BlockChaine.Consensus
             return true;
         }
 
+        public bool IsValid(string hash, int dificulty)
+        {
+            return true;
+        }
+
         public bool IsValid(byte[] hash)
+        {
+            return true;
+        }
+
+        public bool IsValid(byte[] hash, int dificulty)
         {
             return true;
         }

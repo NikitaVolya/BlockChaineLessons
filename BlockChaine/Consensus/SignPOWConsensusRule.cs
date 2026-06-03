@@ -58,18 +58,28 @@ namespace BlockChaine.Consensus
 
         public bool IsValid(string hash)
         {
-            var prefix = new string('0', _difficulty) + _sign;
+            return IsValid(hash, _difficulty);
+        }
+
+        public bool IsValid(string hash, int difficulty)
+        {
+            var prefix = new string('0', difficulty) + _sign;
             return hash.StartsWith(prefix);
         }
 
         public bool IsValid(byte[] hash)
+        {
+            return IsValid(hash, _difficulty);
+        }
+
+        public bool IsValid(byte[] hash, int difficulty)
         {
             int index, shift, i, j;
             Int16 element;
 
             bool res = true;
 
-            for (i = 0; i < _difficulty; i++)
+            for (i = 0; i < difficulty; i++)
             {
                 index = i / 2;
                 shift = ((i + 1) % 2) * 4;

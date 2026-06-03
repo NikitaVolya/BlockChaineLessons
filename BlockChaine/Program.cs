@@ -4,6 +4,7 @@ using BlockChaine.Models;
 using BlockChaine.Services;
 using System;
 using System.ComponentModel.DataAnnotations;
+using System.Text.Json;
 
 
 var consensuRule = new POWConsesnsusRule(5);
@@ -16,6 +17,16 @@ var merkleTreeAudito = new MerkleTreeAudito();
 var aliceWallet = walletService.CreateWallet("Alice");
 var bobWallet = walletService.CreateWallet("Bob");
 var johnWallet = walletService.CreateWallet("John");
+
+Console.Write("Enter port number for P2P Network Service: ");
+int myport = int.Parse(Console.ReadLine() ?? "0");
+Console.Write("Enter port number of a peer to connect: ");
+int nodePort = int.Parse(Console.ReadLine() ?? "0");
+
+var p2pNetworkService = new P2PNetworkService(myport, blockchain, new List<PeerInfo> { new PeerInfo("localhost", nodePort) });
+
+Block block;
+
 
 Wallet SelectWallet(string? name)
 {
@@ -68,12 +79,17 @@ while (true)
     Console.WriteLine("6. Display pending transactions");
     Console.WriteLine("7. Display Merkle Tree for block");
     Console.WriteLine("8. Check tampering");
-    Console.WriteLine("9. Exit");
+    Console.WriteLine("9. Chow transaction confirmation");
+    Console.WriteLine("10. Start P2P Network Service");
+    Console.WriteLine("11. Exit");
 
     var choice = Console.ReadLine();
     switch (choice)
     {
         case "0":
+            blockchain.MinePendingTransactions(bobWallet.Address);
+            blockchain.MinePendingTransactions(bobWallet.Address);
+            blockchain.MinePendingTransactions(johnWallet.Address);
             blockchain.MinePendingTransactions(bobWallet.Address);
             var tx1 = transactionService.CreateTransaction(bobWallet, aliceWallet.Address, 20, "Payment for services", 10);
             var tx2 = transactionService.CreateTransaction(bobWallet, johnWallet.Address, 10, "Gift", 10);
@@ -101,9 +117,8 @@ while (true)
             try
             {
                 var transaction = transactionService.CreateTransaction(senderWallet, recipientAddress, amount, memo, fee);
-                transaction.LockTime = lockTime;
 
-                blockchain.AddTransaction(transaction);
+                blockchain.AddTransaction(transaction, lockTime);
                 Console.WriteLine("Transaction created successfully!");
             }
             catch (Exception ex)
@@ -115,7 +130,10 @@ while (true)
             Console.Write("Enter miner address (Alice/Bob/John): ");
             var minerName = Console.ReadLine();
             string minerAddress = SelectWallet(minerName).Address;
-            blockchain.MinePendingTransactions(minerAddress);
+
+            block = blockchain.MinePendingTransactions(minerAddress);
+            p2pNetworkService.BroadcastBlockAsync(block).Wait();
+
             Console.WriteLine("Block mined successfully!");
             break;
         case "3":
@@ -152,9 +170,8 @@ while (true)
             {
                 var transaction = transactionService.CreateTransaction(senderWallet, recipientAddress, amount, memo, fee);
                 transaction.ReplaceTxId = txId;
-                transaction.LockTime = lockTime;
 
-                blockchain.AddTransaction(transaction);
+                blockchain.AddTransaction(transaction, lockTime);
                 Console.WriteLine("Transaction created successfully!");
             }
             catch (Exception ex)
@@ -168,10 +185,10 @@ while (true)
         case "7":
             Console.Write("Enter block index: ");
             int blockIndex = int.Parse(Console.ReadLine() ?? "0");
-            var block = blockchain.Chain.FirstOrDefault(b => b.Index == blockIndex);
+
+            block = blockchain.Chain.FirstOrDefault(b => b.Index == blockIndex);
             if (block != null)
             {
-
                 List<List<string>> merkleTree = merkleTreeAudito.BuildFullTree(block.Transactions);
                 displayService.PrintTreeStructure(merkleTree);
             }
@@ -218,10 +235,31 @@ while (true)
             }
             break;
         case "9":
+            string transactionId;
+
+            Console.Write("Enter transaction ID to check confirmations: ");
+            transactionId = Console.ReadLine() ?? "";
+            var confirmations = blockchain.GetTransactionConfirmations(transactionId);
+
+            if (confirmations >= 0)
+            {
+                Console.WriteLine($"Transaction {transactionId} has {confirmations} confirmations.");
+            }
+            else
+            {
+                Console.WriteLine("Transaction not found.");
+            }
+
+            break;
+        case "10":
+            p2pNetworkService.Start();
+            break;
+        case "11":
             return;
         default:
             Console.WriteLine("Invalid choice. Please try again.");
             break;
     }
+    Console.WriteLine("Press Enter to continue...");
     Console.ReadLine();
 }

@@ -3,7 +3,7 @@ using BlockChaine.Models;
 
 namespace BlockChaine.Services
 {
-    internal class BlockChainService
+    public class BlockChainService
     {
         public List<Block> Chain { get; set; }
 
@@ -15,6 +15,7 @@ namespace BlockChaine.Services
         private readonly HashingService _hashingService;
         private readonly MiningService _miningService;
         private readonly TransactionService _transactionService;
+        private readonly FileService _fileService;
 
         private readonly IConsesnsusRule _consensusRule;
 
@@ -24,28 +25,44 @@ namespace BlockChaine.Services
         private readonly int _maxPandingTransactionsParAddress = 5;
 
         public decimal BaseFeePerByte { get; set; } = 0.05m;
-        public int MaxBlockSizeBytes {  get; set; } = 500;
+
+        public int MaxTransactionPerBlock { get; set; } = 10;
+        public int MaxBlockSizeBytes { get; set; } = 500;
+
+
+        public int CoinbaseMaturity { get; set; } = 3;
 
         public int Dificulty => _consensusRule.GetDificulty();
 
         public BlockChainService(IConsesnsusRule consesnsusRule)
         {
-            Chain = new List<Block>();
-
             PendingTransactions = new List<Transaction>();
 
             _hashingService = new HashingService();
             _miningService = new MiningService(consesnsusRule);
             _transactionService = new TransactionService(new WalletService());
+            _fileService = new FileService();
 
             _consensusRule = consesnsusRule;
 
-            CreateGenesisBlock();
+            var loadedChain = _fileService.LoadChain();
+            if (loadedChain.Any())
+            {
+                Chain = loadedChain;
+            }
+            else
+            {
+                Chain = new List<Block>();
+                CreateGenesisBlock();
+            }
+
         }
 
         private void CreateGenesisBlock()
         {
             var genesisBlock = new Block(0, new List<Transaction>(), "0");
+            genesisBlock.Timestamp = new DateTime(2024, 1, 1);
+
             _miningService.MineBlock(genesisBlock);
             Chain.Add(genesisBlock);
         }
@@ -63,7 +80,7 @@ namespace BlockChaine.Services
             }
         }
 
-        public void MinePendingTransactions(string minerAddress)
+        public Block MinePendingTransactions(string minerAddress)
         {
             var previousBlock = Chain.Last();
             int blockSize = MaxBlockSizeBytes;
@@ -77,8 +94,10 @@ namespace BlockChaine.Services
             transactionsToInclude.Add(rewardTransaction);
             blockSize -= rewardTransaction.Size;
 
-            foreach (var transaction in PendingTransactions.OrderByDescending(t => t.Fee / t.Size))
+            foreach (var transaction in PendingTransactions.Where(t => t.LockTime <= Chain.Last().Index).OrderByDescending(t => t.Fee / t.Size))
             {
+                if (transactionsToInclude.Count >= MaxTransactionPerBlock)
+                    break;
                 if (transaction.Size > blockSize)
                     continue;
 
@@ -94,12 +113,16 @@ namespace BlockChaine.Services
             _miningService.MineBlock(newBlock);
             Chain.Add(newBlock);
 
+            _fileService.SaveChain(Chain);
+
             PendingTransactions = PendingTransactions.Where(t => !transactionsToInclude.Any(td => td.Id == t.Id)).ToList();
 
             if (newBlock.Index % _adjustmentInterval == 0)
             {
                 AdjustDifficulty();
             }
+
+            return newBlock;
         }
 
         /*
@@ -133,8 +156,13 @@ namespace BlockChaine.Services
         }
         */
 
-        public void AddTransaction(Transaction transaction)
+        public void AddTransaction(Transaction transaction, int lockTime = 0)
         {
+            if (lockTime < 0)
+            {
+                throw new Exception("Lock time cannot be negative.");
+            }
+
             if (!_transactionService.IsValid(transaction).isValid)
             {
                 throw new Exception($"Invalid transaction: {transaction.Id}");
@@ -179,6 +207,8 @@ namespace BlockChaine.Services
             {
                 throw new Exception($"Insufficient balance for transaction: {transaction.Id}");
             }
+
+            transaction.LockTime = Chain.Count + lockTime;
 
             // todo Add check for sender balance
             PendingTransactions.Add(transaction);
@@ -321,7 +351,7 @@ namespace BlockChaine.Services
             {
                 if (block.Transactions == null)
                     continue;
-                
+
                 foreach (var transaction in block.Transactions)
                 {
                     if (transaction.From == address)
@@ -330,6 +360,10 @@ namespace BlockChaine.Services
                     }
                     if (transaction.To == address)
                     {
+                        /// Prevents counting unspendable coinbase transactions in balance calculation
+                        if (transaction.From == "COINBASE" && CoinbaseMaturity > Chain.Count - block.Index)
+                            continue;
+                        
                         balance += transaction.Amount;
                     }
                 }
@@ -343,7 +377,8 @@ namespace BlockChaine.Services
 
             decimal pendingOutgoing = PendingTransactions
                 .Where(t => t.From == address || t.To == address)
-                .Sum(t => { 
+                .Sum(t =>
+                {
                     decimal amount = 0;
                     if (t.From == address)
                         amount -= (t.Amount + t.Fee);
@@ -351,8 +386,66 @@ namespace BlockChaine.Services
                         amount += t.Amount;
                     return amount;
                 });
-            
+
             return balance + pendingOutgoing;
+        }
+
+        public int GetTransactionConfirmations(string transactionId)
+        {
+            int confirmations = -1;
+
+            foreach (var block in Chain)
+            {
+                if (block.Transactions == null)
+                    continue;
+                if (block.Transactions.Any(t => t.Id == transactionId))
+                {
+                    confirmations = Chain.Count - block.Index;
+                    break;
+                }
+            }
+
+            return confirmations;
+        }
+
+        public bool TryAddBlockFromPeer(Block block)
+        {
+            var lastBlock = Chain.Last();
+            if (block.PreviousHash != lastBlock.Hash)
+            {
+                Console.WriteLine($"Received block with invalid previous hash: {block.PreviousHash}");
+                return false;
+            }
+
+            // Validate block hash
+            if (block.Hash != _hashingService.ComputeHash(block))
+            {
+                Console.WriteLine($"Received block with invalid hash: {block.Hash}");
+                return false;
+            }
+
+            if (!_consensusRule.IsValid(block.Hash, block.Dificulty))
+            {
+                Console.WriteLine($"Received block does not meet consensus rules. Hash: {block.Hash}, Dificulty: {block.Dificulty}");
+                return false;
+            }
+
+            // Validate transactions in the block
+            foreach (var transaction in block.Transactions)
+            {
+                if (!_transactionService.IsValid(transaction).isValid){
+                    return false;
+                }
+            }
+
+            Chain.Add(block);
+            foreach (var transaction in block.Transactions)
+            {
+                PendingTransactions.RemoveAll(t => t.Id == transaction.Id);
+            }
+
+            _fileService.SaveChain(Chain);
+            return true;
         }
     }
 }
