@@ -130,60 +130,34 @@ namespace BlockChaine.Services
             return newBlock;
         }
 
-        /*
-        public void AddBlock(List<Transaction> data)
-        {
-            if (data.Count > _transactionLimitPerBlock)
-                throw new Exception($"Transaction limit per block exceeded. Max allowed is {_transactionLimitPerBlock}.");
-
-            if (data.Count == 0 && Chain.Count != 0)
-                throw new Exception("Cannot add an empty block. Please provide at least one transaction.");
-
-            foreach (var transaction in data)
-            {
-                var transactionValidation = _transactionService.IsValid(transaction);
-                if (transaction.Signature == null || !transactionValidation.Item1)
-                    throw new Exception($"Invalid transaction detected: {transaction.Id}\n{transactionValidation.Item2}");
-                if (Chain.Exists(b => b.Transactions.Exists(t => t.Id == transaction.Id)))
-                    throw new Exception($"Transaction with id: {transaction.Id} is already exists in block chain\n");
-            }
-
-            var previousBlock = Chain.Last();
-            var newBlock = new Block(previousBlock.Index + 1, data, previousBlock.Hash);
-
-            _miningService.MineBlock(newBlock);
-            newBlock.Dificulty = _consensusRule.GetDificulty();
-            Chain.Add(newBlock);
-            if (newBlock.Index % _adjustmentInterval == 0)
-            {
-                AdjustDifficulty();
-            }
-        }
-        */
-
         public void AddTransaction(Transaction transaction, int lockTime = 0)
         {
+            // lock time validation: lock time cannot be negative and cannot be too far in the future
             if (lockTime < 0)
             {
                 throw new Exception("Lock time cannot be negative.");
             }
 
+            // Transaction validation
             if (!_transactionService.IsValid(transaction).isValid)
             {
                 throw new Exception($"Invalid transaction: {transaction.Id}");
             }
 
+            // Check for too many pending transactions from the same address
             int fromWalletTransactionCount = PendingTransactions.Where(t => t.From == transaction.From).Count();
             if (fromWalletTransactionCount >= _maxPandingTransactionsParAddress)
             {
                 throw new Exception($"Too many pending transactions from address: {transaction.From}. Max allowed is {_maxPandingTransactionsParAddress}.");
             }
 
+            // Check for duplicate transaction in pending transactions and blockchain
             if (PendingTransactions.Exists(t => t.Id == transaction.Id) || Chain.Exists(b => b.Transactions.Exists(t => t.Id == transaction.Id)))
             {
                 throw new Exception($"Transaction with id: {transaction.Id} is already exists in block chain or pending transactions\n");
             }
 
+            // If this transaction is a replacement for an existing transaction, validate the replacement rules
             if (transaction.ReplaceTxId != null)
             {
                 Transaction? existingTransaction = PendingTransactions.FirstOrDefault(t => t.Id == transaction.ReplaceTxId);
@@ -191,10 +165,12 @@ namespace BlockChaine.Services
                 {
                     throw new Exception($"No transaction found with id: {transaction.ReplaceTxId} to replace.");
                 }
+
                 if (existingTransaction.From != transaction.From)
                 {
                     throw new Exception($"Transaction replacement must be from the same sender. Original transaction from: {existingTransaction.From}, replacement transaction from: {transaction.From}");
                 }
+
                 if (transaction.Fee <= existingTransaction.Fee)
                 {
                     throw new Exception($"Replacement transaction fee must be higher than the original transaction fee. Original fee: {existingTransaction.Fee}, replacement fee: {transaction.Fee}");
@@ -202,20 +178,37 @@ namespace BlockChaine.Services
                 PendingTransactions.Remove(existingTransaction);
             }
 
+            // Check if the transaction fee is sufficient based on the current network fee and transaction size
             decimal currentFeePerBlock = transaction.Size * GetCurrentNetworkFee();
             if (currentFeePerBlock > transaction.Fee)
             {
                 throw new Exception($"Transaction fee is too low for transaction: {transaction.Id}. Minimum required fee is {currentFeePerBlock}");
             }
 
-            if (transaction.From != "COINBASE" && GetPendingBalance(transaction.From) < transaction.Amount + transaction.Fee)
+            // Check if the sender has sufficient balance for the transaction amount and fee (only for non-coinbase and non-minting transactions)
+            if (transaction.From != Transaction.COINBASE_TOKEN &&
+                transaction.From != Transaction.MINTING_TOKEN)
             {
-                throw new Exception($"Insufficient balance for transaction: {transaction.Id}");
+                // Check if the sender has sufficient balance for the transaction fee
+                if (GetPendingBalance(transaction.From, Transaction.MAIN_TOKEN_SYMBOL) < transaction.Fee)
+                {
+                    throw new Exception($"Insufficient balance to cover transaction fee for transaction: {transaction.Id}");
+                }
+
+                // Check if the sender has sufficient balance for the transaction amount
+                decimal minimumRequiredBalance = transaction.Amount;
+
+                if (transaction.TokenSymbol == Transaction.MAIN_TOKEN_SYMBOL)
+                    minimumRequiredBalance += transaction.Fee;
+
+                if (GetPendingBalance(transaction.From, transaction.TokenSymbol) < minimumRequiredBalance)
+                {
+                    throw new Exception($"Insufficient balance for transaction: {transaction.Id}");
+                }
             }
 
             transaction.LockTime = Chain.Count + lockTime;
 
-            // todo Add check for sender balance
             PendingTransactions.Add(transaction);
         }
 
@@ -338,18 +331,8 @@ namespace BlockChaine.Services
             return false;
         }
 
-        public void PrintDificultyHistory()
-        {
-            Console.Write("Dificulty history: ");
-            foreach (var block in Chain)
-            {
-                Console.Write($"{block.Dificulty} -> ");
-            }
-            Console.WriteLine();
-        }
 
-
-        private decimal GetBalance(string address)
+        private decimal GetBalance(string address, string tokenSymbol)
         {
             decimal balance = 0;
             foreach (var block in Chain)
@@ -359,9 +342,16 @@ namespace BlockChaine.Services
 
                 foreach (var transaction in block.Transactions)
                 {
+                    // Skip transactions that are not related to the specified token symbol
+                    if (transaction.TokenSymbol != tokenSymbol)
+                        continue;
+
                     if (transaction.From == address)
                     {
-                        balance -= (transaction.Amount + transaction.Fee);
+                        balance -= transaction.Amount;
+
+                        if (transaction.TokenSymbol == Transaction.MAIN_TOKEN_SYMBOL)
+                            balance -= transaction.Fee;
                     }
                     if (transaction.To == address)
                     {
@@ -377,17 +367,21 @@ namespace BlockChaine.Services
             return balance;
         }
 
-        public decimal GetPendingBalance(string address)
+        public decimal GetPendingBalance(string address, string tokenSymbol)
         {
-            decimal balance = GetBalance(address);
+            decimal balance = GetBalance(address, tokenSymbol);
 
             decimal pendingOutgoing = PendingTransactions
-                .Where(t => t.From == address || t.To == address)
+                .Where(t => (t.From == address || t.To == address) && t.TokenSymbol == tokenSymbol)
                 .Sum(t =>
                 {
                     decimal amount = 0;
                     if (t.From == address)
-                        amount -= (t.Amount + t.Fee);
+                    {
+                        amount -= t.Amount;
+                        if (t.TokenSymbol == Transaction.MAIN_TOKEN_SYMBOL)
+                            amount -= t.Fee;
+                    }
                     if (t.To == address)
                         amount += t.Amount;
                     return amount;
