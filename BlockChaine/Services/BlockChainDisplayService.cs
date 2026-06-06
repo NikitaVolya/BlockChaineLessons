@@ -133,5 +133,15 @@ namespace BlockChaine.Services
                 Console.Write("\n");
             }
         }
+
+        public void PrintPeerStrikes(List<(string RemoteEndPoint, int Strikes)> peerStrikes, int MaxStrikesNumber)
+        {
+            Console.WriteLine("Peer Strikes:");
+            Console.WriteLine(new string('=', 40));
+            foreach (var (remoteEndPoint, strikes) in peerStrikes)
+            {
+                Console.WriteLine($"{remoteEndPoint}: {strikes} strike(s) {(strikes >= MaxStrikesNumber ? "bloked" : "active")}");
+            }
+        }
     }
 }

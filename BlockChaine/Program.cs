@@ -2,13 +2,16 @@
 using BlockChaine.Consensus;
 using BlockChaine.Models;
 using BlockChaine.Services;
-using System;
-using System.ComponentModel.DataAnnotations;
-using System.Text.Json;
+
+Console.Write("Enter port number for P2P Network Service: ");
+int myport = int.Parse(Console.ReadLine() ?? "0");
+Console.Write("Enter port number of a peer to connect: ");
+int nodePort = int.Parse(Console.ReadLine() ?? "0");
 
 
 var consensuRule = new POWConsesnsusRule(5);
-var blockchain = new BlockChainService(consensuRule);
+var fileService = new FileService(myport);
+var blockchain = new BlockChainService(consensuRule, fileService);
 var walletService = new WalletService();
 var transactionService = new TransactionService(walletService);
 var displayService = new BlockChainDisplayService();
@@ -18,12 +21,8 @@ var aliceWallet = walletService.CreateWallet("Alice");
 var bobWallet = walletService.CreateWallet("Bob");
 var johnWallet = walletService.CreateWallet("John");
 
-Console.Write("Enter port number for P2P Network Service: ");
-int myport = int.Parse(Console.ReadLine() ?? "0");
-Console.Write("Enter port number of a peer to connect: ");
-int nodePort = int.Parse(Console.ReadLine() ?? "0");
 
-var p2pNetworkService = new P2PNetworkService(myport, blockchain, new List<PeerInfo> { new PeerInfo("localhost", nodePort) });
+P2PNetworkService p2pNetworkService = new P2PNetworkService(myport, blockchain, new List<PeerInfo> { new PeerInfo("localhost", nodePort) });
 
 Block block;
 
@@ -49,8 +48,7 @@ Wallet SelectWallet(string? name)
     }
     else
     {
-        Console.WriteLine("Invalid wallet name. Please try again.");
-        throw new Exception("Invalid wallet name");
+        return null;
     }
 }
 
@@ -81,7 +79,8 @@ while (true)
     Console.WriteLine("8. Check tampering");
     Console.WriteLine("9. Chow transaction confirmation");
     Console.WriteLine("10. Start P2P Network Service");
-    Console.WriteLine("11. Exit");
+    Console.WriteLine("11. Show Firewall Blacklist");
+    Console.WriteLine("12. Exit");
 
     var choice = Console.ReadLine();
     switch (choice)
@@ -96,6 +95,7 @@ while (true)
             blockchain.AddTransaction(tx1);
             blockchain.AddTransaction(tx2);
             blockchain.MinePendingTransactions(johnWallet.Address);
+            blockchain.MinePendingTransactions(bobWallet.Address);
             Console.WriteLine("Sample transactions created successfully!");
             break;
         case "1":
@@ -132,6 +132,7 @@ while (true)
             string minerAddress = SelectWallet(minerName).Address;
 
             block = blockchain.MinePendingTransactions(minerAddress);
+
             p2pNetworkService.BroadcastBlockAsync(block).Wait();
 
             Console.WriteLine("Block mined successfully!");
@@ -253,8 +254,16 @@ while (true)
             break;
         case "10":
             p2pNetworkService.Start();
+            Console.WriteLine("P2P Network Service started. Listening for peers and blocks...");
+
+            var chainMessage = new P2PMessage("REQUEST_CHAIN", "");
+            p2pNetworkService.BroadCastMessageAsync(chainMessage).Wait();
+
             break;
         case "11":
+            displayService.PrintPeerStrikes(p2pNetworkService.GetPeerStrikes(), p2pNetworkService.GetMaxStrikes());
+            break;
+        case "12":
             return;
         default:
             Console.WriteLine("Invalid choice. Please try again.");

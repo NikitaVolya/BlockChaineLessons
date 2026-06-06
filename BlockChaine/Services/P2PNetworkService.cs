@@ -1,12 +1,10 @@
 ﻿using BlockChaine.Models;
 using System;
-using System.Collections.Generic;
+using System.Collections.Concurrent;
 using System.Diagnostics;
-using System.Linq;
 using System.Net.Sockets;
-using System.Text;
 using System.Text.Json;
-using System.Threading.Tasks;
+
 
 namespace BlockChaine.Services
 {
@@ -15,6 +13,9 @@ namespace BlockChaine.Services
         private readonly int _port;
         private readonly BlockChainService _blockChainService;
 
+        private const int MaxStrikes = 3;
+
+        private ConcurrentDictionary<string, int> _peerStrikes;
         private List<PeerInfo> _peers;
 
 
@@ -23,7 +24,13 @@ namespace BlockChaine.Services
             _port = port;
             _blockChainService = blockChainService;
 
+            _peerStrikes = new ConcurrentDictionary<string, int>();
             _peers = peerInfos;
+        }
+
+        public int GetMaxStrikes()
+        {
+            return MaxStrikes;
         }
 
         public void Start()
@@ -46,8 +53,33 @@ namespace BlockChaine.Services
 
         public async Task HandlePeerAsync(TcpClient client)
         {
+            bool alreadyConnected;
+            int strikes;
+            string? remoteEndPoint = client.Client.RemoteEndPoint?.ToString();
+
             try
             {
+                if (remoteEndPoint == null)
+                {
+                    Debug.WriteLine("Failed to get remote endpoint for peer");
+                    client.Close();
+                    return;
+                }
+
+                alreadyConnected = _peerStrikes.TryGetValue(remoteEndPoint, out strikes);
+
+                if (alreadyConnected && strikes >= MaxStrikes)
+                {
+                    Debug.WriteLine($"[Firewall] Peer {client.Client.RemoteEndPoint} is banned due to too many strikes");
+                    client.Close();
+                    return;
+                }
+
+                if (!alreadyConnected)
+                {
+                    _peerStrikes[remoteEndPoint] = 0;
+                }
+
                 using var streem = client.GetStream();
                 using var reader = new StreamReader(streem);
 
@@ -55,8 +87,17 @@ namespace BlockChaine.Services
 
                 if (json == null) return;
 
-                var message = JsonSerializer.Deserialize<P2PMessage>(json);
-                await CommandExecutor(message);
+                P2PMessage? message = JsonSerializer.Deserialize<P2PMessage>(json);
+
+                if (message != null)
+                {
+                    message.RemoteEndPoint = remoteEndPoint;
+                    await CommandExecutor(message);
+                } else
+                {
+                    _peerStrikes[remoteEndPoint]++;
+                    Debug.WriteLine($"[Firewall Error A ] Invalid message from peer {remoteEndPoint}.");
+                }
             }
             catch (Exception ex)
             {
@@ -66,25 +107,67 @@ namespace BlockChaine.Services
 
         public async Task CommandExecutor(P2PMessage message)
         {
+
             if (message.Type == "NEW_BLOCK")
             {
-                var block = JsonSerializer.Deserialize<Block>(message.Data);
-                if (block != null)
+                Block block;
+                try
                 {
-                    _blockChainService.TryAddBlockFromPeer(block);
+                    block = JsonSerializer.Deserialize<Block>(message.Data);
+                } catch (JsonException ex)
+                {
+                    _peerStrikes[message.RemoteEndPoint]++;
+                    Debug.WriteLine($"[Firewall Error A ] Invalid message from peer {message.RemoteEndPoint}.");
+                    return;
+                }
+                if (_blockChainService.TryAddBlockFromPeer(block))
+                {
                     Debug.WriteLine("New block received from peer");
+                }
+                else
+                {
+                    _peerStrikes[message.RemoteEndPoint] += 2;
+                    Debug.WriteLine($"[Firewall Error B ] Invalid block received from peer {message.RemoteEndPoint}.");
+                }
+            }
+
+            if (message.Type == "REQUEST_CHAIN")
+            {
+                var blockchain = _blockChainService.Chain;
+                var responseMessage = new P2PMessage("CHAIN_RESPONSE", JsonSerializer.Serialize(blockchain));
+                var json = JsonSerializer.Serialize(responseMessage);
+                foreach (var peer in _peers)
+                    await SendMessageAsync(peer, json);
+            }
+
+            if (message.Type == "CHAIN_RESPONSE")
+            {
+                var blockchain = JsonSerializer.Deserialize<List<Block>>(message.Data);
+                if (blockchain != null)
+                {
+                    _blockChainService.ResolveConflicts(blockchain);
+                    Debug.WriteLine("Blockchain updated from peer response");
+                }
+                else
+                {
+                    _peerStrikes[message.RemoteEndPoint]++;
+                    Debug.WriteLine($"[Firewall Error A ] Invalid message from peer {message.RemoteEndPoint}.");
                 }
             }
         }
 
         public async Task BroadcastBlockAsync(Block block)
         {
-            var message = new P2PMessage("NEW_BLOCK", JsonSerializer.Serialize(block));
+            P2PMessage message = new P2PMessage("NEW_BLOCK", JsonSerializer.Serialize(block));
+            await BroadCastMessageAsync(message);
+        }
+
+        public async Task BroadCastMessageAsync(P2PMessage message)
+        {
             var json = JsonSerializer.Serialize(message);
             foreach (var peer in _peers)
             {
-                Debug.WriteLine($"Send message to {peer.Port}");
-                SendMessageAsync(peer, json);
+                await SendMessageAsync(peer, json);
             }
         }
 
@@ -101,6 +184,11 @@ namespace BlockChaine.Services
             {
                 Debug.WriteLine($"Failed to send message to peer {peer.Host}:{peer.Port} - {ex.Message}");
             }
+        }
+
+        public List<(string RemoteEndPoint, int Strikes)> GetPeerStrikes()
+        {
+            return _peerStrikes.Select(kvp => (kvp.Key, kvp.Value)).ToList();
         }
     }
 }

@@ -1,5 +1,7 @@
 ﻿
 
+using System.Text.Json.Serialization;
+
 namespace BlockChaine.Models
 {
     public class Wallet
@@ -7,6 +9,8 @@ namespace BlockChaine.Models
         public string Name { get; } // Не обовзязкове, для зручності
         public string Address { get; }
         public byte[] PublicKey { get; }
+
+        [JsonInclude]
         private byte[] PrivateKey { get; }
 
         public Wallet(string name, string address, byte[] publicKey, byte[] privateKey)
@@ -24,5 +28,7 @@ namespace BlockChaine.Models
             ecdsa.ImportECPrivateKey(PrivateKey, out _);
             return ecdsa.SignData(data, System.Security.Cryptography.HashAlgorithmName.SHA256);
         }
+
+        
     }
 }

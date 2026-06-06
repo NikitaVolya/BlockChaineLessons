@@ -6,7 +6,12 @@ namespace BlockChaine.Services
 {
     public class FileService
     {
-        private readonly string _chainFilePath = "blockchain.json";
+        private readonly string _chainFilePath;
+
+        public FileService(int port)
+        {
+            _chainFilePath = $"blockchain_{port}.json";
+        }
 
         public void SaveChain(List<Block> chain)
         {

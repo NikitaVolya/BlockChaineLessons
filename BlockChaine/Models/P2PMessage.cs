@@ -17,6 +17,7 @@ namespace BlockChaine.Models
 
     public class P2PMessage
     {
+        public string RemoteEndPoint { get; set; } = string.Empty;
         public string Type { get; set; }
         public string Data { get; set; }
 

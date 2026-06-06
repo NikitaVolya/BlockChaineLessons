@@ -1,5 +1,6 @@
 ﻿using BlockChaine.Consensus;
 using BlockChaine.Models;
+using System.Numerics;
 
 namespace BlockChaine.Services
 {
@@ -22,26 +23,30 @@ namespace BlockChaine.Services
         private readonly int _adjustmentInterval = 2;
         private readonly double _targetBlockTime = 10;
 
+
         private readonly int _maxPandingTransactionsParAddress = 5;
+
+        private readonly int _blockMaxFuturHoursTrashHold = 2;
 
         public decimal BaseFeePerByte { get; set; } = 0.05m;
 
         public int MaxTransactionPerBlock { get; set; } = 10;
         public int MaxBlockSizeBytes { get; set; } = 500;
+        public const int MaxReorgDepth = 5;
 
 
         public int CoinbaseMaturity { get; set; } = 3;
 
         public int Dificulty => _consensusRule.GetDificulty();
 
-        public BlockChainService(IConsesnsusRule consesnsusRule)
+        public BlockChainService(IConsesnsusRule consesnsusRule, FileService fileService)
         {
             PendingTransactions = new List<Transaction>();
 
             _hashingService = new HashingService();
             _miningService = new MiningService(consesnsusRule);
             _transactionService = new TransactionService(new WalletService());
-            _fileService = new FileService();
+            _fileService = fileService;
 
             _consensusRule = consesnsusRule;
 
@@ -424,6 +429,13 @@ namespace BlockChaine.Services
                 return false;
             }
 
+            // Time validation: block timestamp should be greater than previous block and not from the future
+            if (block.Timestamp <= lastBlock.Timestamp || block.Timestamp > DateTime.UtcNow.AddHours(_blockMaxFuturHoursTrashHold))
+            {
+                Console.WriteLine($"Received block with invalid timestamp: {block.Timestamp}");
+                return false;
+            }
+
             if (!_consensusRule.IsValid(block.Hash, block.Dificulty))
             {
                 Console.WriteLine($"Received block does not meet consensus rules. Hash: {block.Hash}, Dificulty: {block.Dificulty}");
@@ -445,6 +457,60 @@ namespace BlockChaine.Services
             }
 
             _fileService.SaveChain(Chain);
+            return true;
+        }
+
+        public bool ResolveConflicts(List<Block> peerChain)
+        {
+
+            if (!IsValidChain(peerChain).isValid)
+            {
+                Console.WriteLine("Peer chain is invalid. Cannot resolve conflicts.");
+                return false;
+            }
+
+            if (peerChain.Count <= Chain.Count)
+            {
+                Console.WriteLine("Peer chain is not longer than current chain. No need to resolve conflicts.");
+                return false;
+            }
+
+            int forkIndex = -1;
+            for (int i = 0; i < Math.Min(Chain.Count, peerChain.Count); i++)
+            {
+                if (Chain[i].Hash != peerChain[i].Hash)
+                {
+                    forkIndex = i;
+                    break;
+                }
+            }
+
+            if (forkIndex == -1)
+            {
+                Console.WriteLine("No fork detected. Chains are identical.");
+                return false;
+            }
+
+            if (Chain.Count - forkIndex > MaxReorgDepth)
+            {
+                Console.WriteLine($"Fork detected at index {forkIndex}, but it's too deep to reorganize (max reorg depth is {MaxReorgDepth}).");
+                return false;
+            }
+
+            int currentChainPOW = Chain.Sum(b => b.Dificulty);
+            int peerChainPOW = peerChain.Sum(b => b.Dificulty);
+
+            if (peerChainPOW < currentChainPOW)
+            {
+                Console.WriteLine($"Peer chain has less cumulative proof of work ({peerChainPOW}) than current chain ({currentChainPOW}). No need to resolve conflicts.");
+                return false;
+            }
+
+            Console.WriteLine("Peer chain is longer and valid. Replacing current chain.");
+            Chain = peerChain.Select(block => (Block)block.Clone()).ToList();
+
+            _fileService.SaveChain(Chain);
+
             return true;
         }
     }
