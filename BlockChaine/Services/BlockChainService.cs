@@ -366,6 +366,7 @@ namespace BlockChaine.Services
                     if (transaction.To == address)
                     {
                         /// Prevents counting unspendable coinbase transactions in balance calculation
+                        /// and also prevents counting coinbase transactions that are not yet matured
                         if (transaction.From == "COINBASE" && CoinbaseMaturity > Chain.Count - block.Index)
                             continue;
                         

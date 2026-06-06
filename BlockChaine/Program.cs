@@ -3,6 +3,7 @@ using BlockChaine.Consensus;
 using BlockChaine.Models;
 using BlockChaine.Services;
 
+
 Console.Write("Enter port number for P2P Network Service: ");
 int myport = int.Parse(Console.ReadLine() ?? "0");
 Console.Write("Enter port number of a peer to connect: ");
@@ -16,6 +17,7 @@ var walletService = new WalletService();
 var transactionService = new TransactionService(walletService);
 var displayService = new BlockChainDisplayService();
 var merkleTreeAudito = new MerkleTreeAudito();
+var blockChainExplorerService = new BlockChainExplorerService(blockchain);
 
 var aliceWallet = walletService.CreateWallet("Alice");
 var bobWallet = walletService.CreateWallet("Bob");
@@ -23,8 +25,6 @@ var johnWallet = walletService.CreateWallet("John");
 
 
 P2PNetworkService p2pNetworkService = new P2PNetworkService(myport, blockchain, new List<PeerInfo> { new PeerInfo("localhost", nodePort) });
-
-Block block;
 
 
 Wallet SelectWallet(string? name)
@@ -61,6 +61,7 @@ void CheckTampering(Block block)
     tamperDetector.DetectTampering(block, randomTransaction);
 }
 
+/*
 while (true)
 {
     string? senderName, recipientName, memo, recipientAddress, txId;
@@ -272,3 +273,5 @@ while (true)
     Console.WriteLine("Press Enter to continue...");
     Console.ReadLine();
 }
+
+*/
