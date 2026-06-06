@@ -8,7 +8,7 @@ namespace BlockChaine.Services
 {
     public class WalletKeystoreService
     {
-        private const string _defaultFileName = "wallet.dat";
+        public static readonly string DefaultFileName = "wallet.dat";
 
         private readonly EncryptionService _encryptionService;
 
@@ -18,7 +18,7 @@ namespace BlockChaine.Services
         }
 
 
-        public bool SaveWalletToFile(Wallet wallet, string password, string filePath)
+        public bool SaveWallet(Wallet wallet, string password, string filePath)
         {
             bool res = true;
 
@@ -39,7 +39,7 @@ namespace BlockChaine.Services
 
         public bool SaveWallet(Wallet wallet, string password)
         {
-            return SaveWalletToFile(wallet, password, _defaultFileName);
+            return SaveWallet(wallet, password, DefaultFileName);
         }
 
         public Wallet LoadWalletFromFile(string password, string filePath)

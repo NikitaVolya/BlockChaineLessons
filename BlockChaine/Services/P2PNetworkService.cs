@@ -1,5 +1,4 @@
 ﻿using BlockChaine.Models;
-using System;
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Net.Sockets;
@@ -8,6 +7,13 @@ using System.Text.Json;
 
 namespace BlockChaine.Services
 {
+    public enum NetworkCommandType
+    {
+        NEW_BLOCK,
+        REQUEST_CHAIN,
+        CHAIN_RESPONSE
+    }
+
     public class P2PNetworkService
     {
         private readonly int _port;
@@ -108,12 +114,12 @@ namespace BlockChaine.Services
         public async Task CommandExecutor(P2PMessage message)
         {
 
-            if (message.Type == "NEW_BLOCK")
+            if (message.Type == NetworkCommandType.NEW_BLOCK.ToString())
             {
                 Block block;
                 try
                 {
-                    block = JsonSerializer.Deserialize<Block>(message.Data);
+                    block = JsonSerializer.Deserialize<Block>(message.Data)!;
                 } catch (JsonException ex)
                 {
                     _peerStrikes[message.RemoteEndPoint]++;
@@ -131,16 +137,16 @@ namespace BlockChaine.Services
                 }
             }
 
-            if (message.Type == "REQUEST_CHAIN")
+            if (message.Type == NetworkCommandType.REQUEST_CHAIN.ToString())
             {
                 var blockchain = _blockChainService.Chain;
-                var responseMessage = new P2PMessage("CHAIN_RESPONSE", JsonSerializer.Serialize(blockchain));
+                var responseMessage = new P2PMessage(NetworkCommandType.CHAIN_RESPONSE.ToString(), JsonSerializer.Serialize(blockchain));
                 var json = JsonSerializer.Serialize(responseMessage);
                 foreach (var peer in _peers)
                     await SendMessageAsync(peer, json);
             }
 
-            if (message.Type == "CHAIN_RESPONSE")
+            if (message.Type == NetworkCommandType.CHAIN_RESPONSE.ToString())
             {
                 var blockchain = JsonSerializer.Deserialize<List<Block>>(message.Data);
                 if (blockchain != null)
@@ -154,11 +160,22 @@ namespace BlockChaine.Services
                     Debug.WriteLine($"[Firewall Error A ] Invalid message from peer {message.RemoteEndPoint}.");
                 }
             }
+
+        }
+
+        public async Task AddPeerByPort(int port)
+        {
+            
+            if (!_peers.Any(p => p.Port == port && p.Host == "localhost")) {
+                _peers.Add(new PeerInfo("localhost", port));
+                var chainMessage = new P2PMessage("REQUEST_CHAIN", "");
+                await BroadCastMessageAsync(chainMessage);
+            }
         }
 
         public async Task BroadcastBlockAsync(Block block)
         {
-            P2PMessage message = new P2PMessage("NEW_BLOCK", JsonSerializer.Serialize(block));
+            P2PMessage message = new P2PMessage(NetworkCommandType.NEW_BLOCK.ToString(), JsonSerializer.Serialize(block));
             await BroadCastMessageAsync(message);
         }
 

@@ -94,13 +94,16 @@ namespace BlockChaine.Services
 
 
             var reward = MiningReward;
-            var rewardTransaction = new Transaction("COINBASE", minerAddress, reward, "reward for block", 0);
+            var rewardTransaction = new Transaction(Transaction.COINBASE_TOKEN, minerAddress, reward, "reward for block", 0);
 
             transactionsToInclude.Add(rewardTransaction);
             blockSize -= rewardTransaction.Size;
 
-            foreach (var transaction in PendingTransactions.Where(t => t.LockTime <= Chain.Last().Index).OrderByDescending(t => t.Fee / t.Size))
+            IEnumerable<Transaction> transactionsToAdd = PendingTransactions.Where(t => t.LockTime <= Chain.Last().Index).OrderByDescending(t => t.Fee / t.Size);
+
+            foreach (var transaction in transactionsToAdd)
             {
+
                 if (transactionsToInclude.Count >= MaxTransactionPerBlock)
                     break;
                 if (transaction.Size > blockSize)
@@ -180,7 +183,7 @@ namespace BlockChaine.Services
 
             // Check if the transaction fee is sufficient based on the current network fee and transaction size
             decimal currentFeePerBlock = transaction.Size * GetCurrentNetworkFee();
-            if (currentFeePerBlock > transaction.Fee)
+            if (transaction.From != Transaction.MINTING_TOKEN && currentFeePerBlock > transaction.Fee)
             {
                 throw new Exception($"Transaction fee is too low for transaction: {transaction.Id}. Minimum required fee is {currentFeePerBlock}");
             }
@@ -207,7 +210,7 @@ namespace BlockChaine.Services
                 }
             }
 
-            transaction.LockTime = Chain.Count + lockTime;
+            transaction.LockTime = Chain.Last().Index + lockTime;
 
             PendingTransactions.Add(transaction);
         }
@@ -284,7 +287,7 @@ namespace BlockChaine.Services
                 var currentBlock = chain[i];
                 var previousBlock = chain[i - 1];
 
-                if ((currentBlock.Timestamp - previousBlock.Timestamp).Microseconds <= 100)
+                if ((currentBlock.Timestamp - previousBlock.Timestamp).TotalMilliseconds <= 100)
                     return (false, $"Block {currentBlock.Index} has an invalid timestamp: {currentBlock.Timestamp}");
                 if (DateTime.UtcNow.AddMinutes(timeErrorArea) < currentBlock.Timestamp)
                     return (false, $"Block {currentBlock.Index} has a timestamp from the future: {currentBlock.Timestamp}");
@@ -357,7 +360,7 @@ namespace BlockChaine.Services
                     {
                         /// Prevents counting unspendable coinbase transactions in balance calculation
                         /// and also prevents counting coinbase transactions that are not yet matured
-                        if (transaction.From == "COINBASE" && CoinbaseMaturity > Chain.Count - block.Index)
+                        if (transaction.From == "COINBASE" && CoinbaseMaturity > Chain.Count - block.Index - 1)
                             continue;
                         
                         balance += transaction.Amount;
@@ -471,9 +474,10 @@ namespace BlockChaine.Services
             }
 
             int forkIndex = -1;
-            for (int i = 0; i < Math.Min(Chain.Count, peerChain.Count); i++)
+            for (int i = 0; i < Math.Max(Chain.Count, peerChain.Count); i++)
             {
-                if (Chain[i].Hash != peerChain[i].Hash)
+                if (i == Chain.Count - 1 ||
+                    Chain[i].Hash != peerChain[i].Hash)
                 {
                     forkIndex = i;
                     break;

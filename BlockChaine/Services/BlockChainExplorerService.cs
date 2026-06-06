@@ -49,7 +49,6 @@ namespace BlockChaine.Services
         public List<Transaction> GetTransactionHistory(string address)
         {
             List<Transaction> transactions = _blockChainService.Chain
-                .SkipLast(_blockChainService.CoinbaseMaturity)
                 .SelectMany(block => block.Transactions)
                 .Where(t => t.From == address || t.To == address)
                 .OrderByDescending(t => t.TimeStamp)

@@ -12,9 +12,9 @@ namespace BlockChaine.Services
             _walletService = walletService;
         }
 
-        public Transaction CreateTransaction(Wallet sender, string to, decimal amount, string memo, decimal fee)
+        public Transaction CreateTransaction(Wallet sender, string to, decimal amount, string memo, decimal fee, string tokenSymbol)
         {
-            var tx = new Transaction(sender.Address, to, amount, memo, fee);
+            var tx = new Transaction(sender.Address, to, amount, memo, fee, tokenSymbol);
 
             tx.SenderPublicKey = sender.PublicKey;
             tx.Signature = sender.Sign(tx.GetDataToSign());
@@ -29,7 +29,7 @@ namespace BlockChaine.Services
 
         public (bool isValid, string errorMessage) IsValid(Transaction transaction)
         {
-            if (transaction.From == "COINBASE")
+            if (transaction.From == Transaction.COINBASE_TOKEN || transaction.From == Transaction.MINTING_TOKEN)
                 return (true, "Coinbase transactions are always valid");
 
             if (transaction == null)

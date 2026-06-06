@@ -5,10 +5,12 @@ namespace BlockChaine.Models
 {
     public class Transaction : ICloneable
     {
+        private const string MAIN_TOKEN_SYMBOL_CONSTANT = "MAIN";
+
         public static readonly string COINBASE_TOKEN = "COINBASE";
         public static readonly string MINTING_TOKEN = "MINT";
 
-        public static readonly string MAIN_TOKEN_SYMBOL = "MAIN";
+        public static readonly string MAIN_TOKEN_SYMBOL = MAIN_TOKEN_SYMBOL_CONSTANT;
 
 
         public String Id { get; set; }
@@ -31,7 +33,7 @@ namespace BlockChaine.Models
 
         public string? ReplaceTxId { get; set; } = null;
 
-        public Transaction(string from, string to, decimal amount, string memo, decimal fee, string tokenSymbol = MAIN_TOKEN_SYMBOL)
+        public Transaction(string from, string to, decimal amount, string memo, decimal fee, string tokenSymbol = MAIN_TOKEN_SYMBOL_CONSTANT)
         {
             Id = Guid.NewGuid().ToString();
             From = from;

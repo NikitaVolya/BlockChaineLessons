@@ -33,7 +33,10 @@ namespace BlockChaine.Models
             {
                 Timestamp = Timestamp,
                 Hash = Hash,
-                Nonce = Nonce
+                Nonce = Nonce,
+                Dificulty = Dificulty,
+                MerkleRoot = MerkleRoot,
+                MerkleTree = MerkleTree.Select(l => l.ToList()).ToList(),
             };
         }
     }
